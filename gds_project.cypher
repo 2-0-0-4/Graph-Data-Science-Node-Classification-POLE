@@ -1,6 +1,4 @@
-// =============================================================================
-// SECTION 1: GRAPH PROJECTIONS
-// =============================================================================
+// GRAPH PROJECTIONS
 
 // Project social graph for betweenness and Louvain
 CALL gds.graph.project(
@@ -18,9 +16,7 @@ CALL gds.graph.project(
 YIELD graphName, nodeCount, relationshipCount
 RETURN graphName, nodeCount, relationshipCount;
 
-// =============================================================================
-// SECTION 2: DATA CLEANING
-// =============================================================================
+// DATA CLEANING
 
 // Identify isolated nodes
 MATCH (n)
@@ -68,11 +64,9 @@ RETURN
   avg(p.betweenness) AS avgBetweenness,
   stDev(p.betweenness) AS stdBetweenness;
 
-// =============================================================================
-// SECTION 3: WRITE STRUCTURAL FEATURES VIA GDS
-// =============================================================================
+// WRITE STRUCTURAL FEATURES VIA GDS
 
-// Triangle count — write to in-memory graph then to nodes
+// Triangle count: write to in-memory graph then to nodes
 CALL gds.triangleCount.mutate('crime-associates', {
   mutateProperty: 'triangleCount'
 })
@@ -83,7 +77,7 @@ YIELD nodeId, triangleCount
 WITH gds.util.asNode(nodeId) AS node, triangleCount
 SET node.triangleCount = triangleCount;
 
-// Betweenness centrality — write to in-memory graph then to nodes
+// Betweenness centrality: write to in-memory graph then to nodes
 CALL gds.betweenness.mutate('social', {
   mutateProperty: 'betweenness'
 })
@@ -93,9 +87,6 @@ CALL gds.betweenness.stream('social')
 YIELD nodeId, score AS centrality
 WITH gds.util.asNode(nodeId) AS node, centrality
 SET node.betweenness = centrality;
-
-// Log-transform betweenness to handle right-skewed distribution
-// (mean=625, stdDev=879, max=5275 — stdDev exceeds mean)
 MATCH (p:Person)
 WHERE p.betweenness IS NOT NULL
 SET p.betweennessLog = CASE
@@ -103,7 +94,7 @@ SET p.betweennessLog = CASE
   ELSE 0.0
 END;
 
-// Louvain community detection — write to in-memory graph then to nodes
+// Louvain community detection: write to in-memory graph then to nodes
 CALL gds.louvain.mutate('social', {
   mutateProperty: 'communityId'
 })
@@ -114,19 +105,16 @@ YIELD nodeId, communityId
 WITH gds.util.asNode(nodeId) AS node, communityId
 SET node.communityId = communityId;
 
-// =============================================================================
-// SECTION 4: WRITE LABEL AND BASE FEATURES
-// =============================================================================
+// WRITE LABEL AND BASE FEATURES
 
-// Target label — derived from graph traversal not external source
+// Target label: derived from graph traversal not external source
 MATCH (p:Person)
 SET p.isInvolved = CASE
   WHEN (p)-[:PARTY_TO]->(:Crime) THEN 1
   ELSE 0
 END;
 
-// crimeCount — computed but EXCLUDED from ML features (data leakage)
-// Both crimeCount and isInvolved derive from PARTY_TO relationships
+// crimeCount: computed but EXCLUDED from ML features (data leakage)
 MATCH (p:Person)
 SET p.crimeCount = count{ (p)-[:PARTY_TO]->(:Crime) };
 
@@ -140,9 +128,7 @@ SET p.familyDegree = count{ (p)-[:FAMILY_REL]-() };
 MATCH (p:Person)
 SET p.socialDegree = count{ (p)-[:KNOWS_SN]-() };
 
-// =============================================================================
-// SECTION 5: WRITE NEIGHBOURHOOD FEATURES
-// =============================================================================
+// WRITE NEIGHBOURHOOD FEATURES
 
 // Criminal neighbour count and neighbour crime total
 MATCH (p:Person)
@@ -165,12 +151,9 @@ OPTIONAL MATCH (p)-[:KNOWS_SN]-(s:Person)-[:PARTY_TO]->(:Crime)
 WITH p, count(DISTINCT s) AS linkCount
 SET p.criminalSocialCount = linkCount;
 
-// =============================================================================
-// SECTION 6: WRITE BEHAVIOURAL FEATURES
-// (These showed the highest discriminative power in separability analysis)
-// =============================================================================
+// WRITE BEHAVIOURAL FEATURES
 
-// Night call ratio — proportion of calls made between midnight and 5am
+// Night call ratio: proportion of calls made between midnight and 5am
 // Motivated by analysis showing night calls correlate with criminal coordination
 MATCH (p:Person)
 OPTIONAL MATCH (p)-[:HAS_PHONE]->(ph:Phone)<-[:CALLER]-(pc:PhoneCall)
@@ -183,16 +166,13 @@ SET p.nightCallRatio = CASE
   ELSE 0.0
 END;
 
-// Criminal vehicle count — vehicles linked to crimes the person was party to
+// Criminal vehicle count: vehicles linked to crimes the person was party to
 MATCH (p:Person)
 OPTIONAL MATCH (p)-[:PARTY_TO]->(c:Crime)<-[:INVOLVED_IN]-(v:Vehicle)
 WITH p, count(DISTINCT v) AS criminalVehicleCount
 SET p.criminalVehicleCount = criminalVehicleCount;
 
-// =============================================================================
-// SECTION 7: FEATURE SEPARABILITY ANALYSIS
-// Run before pipeline training to verify discriminative value
-// =============================================================================
+// FEATURE SEPARABILITY ANALYSIS
 
 MATCH (p:Person)
 RETURN
@@ -215,9 +195,7 @@ RETURN
   avg(p.criminalSocialCount) AS avgCrimSocial
 ORDER BY label;
 
-// =============================================================================
-// SECTION 8: VERIFICATION QUERIES
-// =============================================================================
+// VERIFICATION QUERIES
 
 // Verify base features
 MATCH (p:Person)
@@ -268,9 +246,7 @@ MATCH (p:Person)
 WHERE p.isInvolved NOT IN [0, 1]
 RETURN count(p) AS invalidLabels;
 
-// =============================================================================
-// SECTION 9: SOCIAL-FULL PROJECTION (Phase 1 — without embedding)
-// =============================================================================
+// SOCIAL-FULL PROJECTION (without embedding)
 
 CALL gds.graph.project(
   'social-full',
@@ -304,9 +280,7 @@ CALL gds.graph.project(
 YIELD graphName, nodeCount, relationshipCount
 RETURN graphName, nodeCount, relationshipCount;
 
-// =============================================================================
-// SECTION 10: FASTRP EMBEDDINGS — THREE DIMENSIONS TESTED
-// =============================================================================
+// FASTRP EMBEDDINGS — THREE DIMENSIONS TESTED
 
 // Generate 32-dim embeddings and write to nodes
 CALL gds.fastRP.stream('social-full', {
@@ -317,7 +291,7 @@ YIELD nodeId, embedding
 WITH gds.util.asNode(nodeId) AS node, embedding
 SET node.embedding32 = embedding;
 
-// Generate 64-dim embeddings and write to nodes (optimal)
+// Generate 64-dim embeddings and write to nodes 
 CALL gds.fastRP.stream('social-full', {
   embeddingDimension: 64,
   randomSeed: 42
@@ -335,9 +309,7 @@ YIELD nodeId, embedding
 WITH gds.util.asNode(nodeId) AS node, embedding
 SET node.embedding128 = embedding;
 
-// =============================================================================
-// SECTION 11: NODE2VEC EMBEDDINGS
-// =============================================================================
+// NODE2VEC EMBEDDINGS
 
 // Node2Vec default parameters
 CALL gds.node2vec.stream('social-full', {
@@ -352,7 +324,7 @@ YIELD nodeId, embedding
 WITH gds.util.asNode(nodeId) AS node, embedding
 SET node.embeddingN2V = embedding;
 
-// Node2Vec global structure variant (inOutFactor < 1 = explores outward)
+// Node2Vec global structure variant (inOutFactor < 1)
 CALL gds.node2vec.stream('social-full', {
   embeddingDimension: 64,
   walkLength: 80,
@@ -367,7 +339,7 @@ YIELD nodeId, embedding
 WITH gds.util.asNode(nodeId) AS node, embedding
 SET node.embeddingN2V_global = embedding;
 
-// Node2Vec local structure variant (inOutFactor > 1 = stays local)
+// Node2Vec local structure variant (inOutFactor > 1)
 CALL gds.node2vec.stream('social-full', {
   embeddingDimension: 64,
   walkLength: 80,
@@ -382,9 +354,7 @@ YIELD nodeId, embedding
 WITH gds.util.asNode(nodeId) AS node, embedding
 SET node.embeddingN2V_local = embedding;
 
-// =============================================================================
-// SECTION 12: DROP AND RECREATE SOCIAL-FULL WITH ALL EMBEDDINGS
-// =============================================================================
+// DROP AND RECREATE SOCIAL-FULL WITH ALL EMBEDDINGS
 
 CALL gds.graph.drop('social-full');
 
@@ -437,11 +407,8 @@ RETURN
   size(p.embeddingN2V) AS dimN2V
 LIMIT 10;
 
-// =============================================================================
 // SECTION 13: PIPELINE A — BEHAVIOURAL FEATURES ONLY
 // nightCallRatio + criminalVehicleCount
-// Result: F1-Macro 0.6895 (best scalar pipeline)
-// =============================================================================
 
 CALL gds.beta.pipeline.nodeClassification.create('pipeline-A');
 
@@ -475,11 +442,8 @@ RETURN
   modelInfo.metrics.F1_WEIGHTED.test AS testF1Weighted,
   modelInfo.metrics.F1_MACRO.test AS testF1Macro;
 
-// =============================================================================
-// SECTION 14: PIPELINE B — BEHAVIOURAL + STRUCTURAL FEATURES
+// PIPELINE B — BEHAVIOURAL + STRUCTURAL FEATURES
 // Adds betweennessLog + triangleCount
-// Result: F1-Macro 0.4861 (worse than A — structural features add noise)
-// =============================================================================
 
 CALL gds.beta.pipeline.nodeClassification.create('pipeline-B');
 
@@ -514,14 +478,11 @@ RETURN
   modelInfo.metrics.F1_WEIGHTED.test AS testF1Weighted,
   modelInfo.metrics.F1_MACRO.test AS testF1Macro;
 
-// =============================================================================
-// SECTION 15: PIPELINE C — BEHAVIOURAL + NEIGHBOURHOOD FEATURES
-// Two variants tested:
+
+// PIPELINE C — BEHAVIOURAL + NEIGHBOURHOOD FEATURES
 // C-full: adds criminalNeighborCount + criminalFamilyCount to Pipeline A
 // C-best: uses ONLY the two highest-separating scalar features
-// Both result: F1-Macro 0.4861
-// This proves failure is due to dataset size not feature quality
-// =============================================================================
+
 
 // C-full variant
 CALL gds.beta.pipeline.nodeClassification.create('pipeline-C');
@@ -558,8 +519,7 @@ RETURN
   modelInfo.metrics.F1_MACRO.test AS testF1Macro;
 
 // C-best variant — only highest separating features (9.17x and 3.55x)
-// Still collapses to 0.4861 — proves zero-inflated distributions fail
-// regardless of average separation ratio
+
 CALL gds.beta.pipeline.nodeClassification.create('pipeline-C-best');
 
 CALL gds.beta.pipeline.nodeClassification.addLogisticRegression('pipeline-C-best', { maxEpochs: 100, penalty: 0.001 });
@@ -592,12 +552,7 @@ RETURN
   modelInfo.metrics.F1_WEIGHTED.test AS testF1Weighted,
   modelInfo.metrics.F1_MACRO.test AS testF1Macro;
 
-// =============================================================================
-// SECTION 16: PIPELINE D — FASTRP EMBEDDINGS (THREE DIMENSIONS)
-// D-32: F1-Macro 0.4861 (insufficient dimensions)
-// D-64: F1-Macro 0.7751 (optimal — best overall result)
-// D-128: F1-Macro 0.70 (overfitting)
-// =============================================================================
+// PIPELINE D — FASTRP EMBEDDINGS (THREE DIMENSIONS: 32, 64, 128)
 
 // Pipeline D-32
 CALL gds.beta.pipeline.nodeClassification.create('pipeline-D-32');
@@ -671,11 +626,7 @@ RETURN
   modelInfo.metrics.F1_WEIGHTED.test AS testF1Weighted,
   modelInfo.metrics.F1_MACRO.test AS testF1Macro;
 
-// =============================================================================
-// SECTION 17: PIPELINE E — NODE2VEC EMBEDDINGS
-// All three variants (default, global, local) collapsed to F1-Macro 0.4861
-// Attributed to insufficient graph density for random walk convergence
-// =============================================================================
+// PIPELINE E — NODE2VEC EMBEDDINGS 
 
 // Pipeline E-default
 CALL gds.beta.pipeline.nodeClassification.create('pipeline-E-default');
