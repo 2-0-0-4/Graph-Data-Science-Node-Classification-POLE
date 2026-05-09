@@ -1,16 +1,18 @@
 # Graph Machine Learning for Criminal Risk Prediction
  
 Node classification on the **POLE-50** dataset using Neo4j Graph Data Science (GDS).
- 
+
+
 ## Overview
  
 The study evaluates multiple node classification pipelines using:
 
-- Total nodes: 61,521  
-- Total relationships: 105,840  
-- Node types: Person, Crime, Location, PostCode, Area, Officer, Phone, PhoneCall, Email, Vehicle, Object  
-- Person nodes used for classification: 369  
-- Criminally involved individuals: 29  
+- Behavioural features
+- Structural graph metrics
+- Neighbourhood-based features
+- Graph embeddings (FastRP and Node2Vec)
+
+Classification was performed using Logistic Regression pipelines within Neo4j GDS.
 
 The full methodology and results are documented in [`report/`](report/).
  
@@ -26,8 +28,13 @@ The full methodology and results are documented in [`report/`](report/).
 ```
  
 ## Dataset
- 
-The POLE-50 graph contains **61,521 nodes** and **105,840 relationships** across 11 node types (Person, Crime, Location, Vehicle, Phone, etc.). Classification targets are the **369 Person nodes**, of which **29 are criminally involved**.
+- Total nodes: 61,521  
+- Total relationships: 105,840  
+- Node types: Person, Crime, Location, PostCode, Area, Officer, Phone, PhoneCall, Email, Vehicle, Object  
+- Person nodes used for classification: 369  
+- Criminally involved individuals: 29  
+
+See `report/schema.png` for the full graph schema.
 
 ## Evaluation Metrics
 
